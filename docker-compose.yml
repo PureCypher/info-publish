@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  discord-bot:
+    build: .
+    container_name: discord-announcer-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./bot.log:/app/bot.log
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import asyncio; import aiohttp; print('Bot is healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  bot-network:
+    driver: bridge
+
+volumes:
+  logs:
+    driver: local
