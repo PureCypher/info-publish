@@ -23,8 +23,8 @@ A production-ready Discord bot that automatically publishes messages from announ
 ### 1. Clone and Setup
 
 ```bash
-git clone <your-repo-url>
-cd discord-announcer-bot
+git clone https://github.com/PureCypher/info-publish
+cd info-publish
 ```
 
 ### 2. Configure Environment
