@@ -1,35 +1,50 @@
-version: '3.8'
 
 services:
   discord-bot:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     container_name: discord-announcer-bot
-    restart: unless-stopped
+    # Use 'on-failure' with retry limit instead of 'unless-stopped' to prevent infinite restart loops
+    restart: on-failure:5
     env_file:
       - .env
     volumes:
-      - ./logs:/app/logs
-      - ./bot.log:/app/bot.log
+      - ./logs:/app/logs:rw
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      # Add memory limits to prevent resource exhaustion
+      - MALLOC_TRIM_THRESHOLD_=131072
     networks:
       - bot-network
+    # Resource limits to prevent memory leaks from consuming all system resources
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    # Simple health check
     healthcheck:
       test: ["CMD", "python", "-c", "import asyncio; import aiohttp; print('Bot is healthy')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    # Enhanced logging configuration
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=discord-bot"
+    # Add stop signal and grace period for proper shutdown
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
 
 networks:
   bot-network:
     driver: bridge
-
-volumes:
-  logs:
-    driver: local
