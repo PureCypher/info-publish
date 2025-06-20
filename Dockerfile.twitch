@@ -1,0 +1,71 @@
+# Use Python 3.11 slim image as base
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables for better Python behavior in containers
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONIOENCODING=utf-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# Install system dependencies and clean up in single layer to reduce image size
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libc6-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy requirements first for better Docker layer caching
+COPY requirements.txt .
+
+# Install Python dependencies with optimizations
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt && \
+    # Clean pip cache
+    pip cache purge
+
+# Copy twitch notifier code
+COPY twitch_notifier.py ./twitch_notifier.py
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash --uid 1000 twitchuser
+
+# Create logs directory and set proper permissions
+RUN mkdir -p /app/logs /app/tmp && \
+    chown -R twitchuser:twitchuser /app && \
+    chmod 755 /app/logs
+
+# Switch to non-root user
+USER twitchuser
+
+# Create a simple health check script for Twitch API connectivity
+RUN echo '#!/bin/bash\n\
+python3 -c "\
+import requests\n\
+import sys\n\
+import os\n\
+\n\
+try:\n\
+    # Simple health check - verify we can reach Twitch API\n\
+    response = requests.get(\"https://api.twitch.tv/helix/\", timeout=10)\n\
+    # Twitch API returns 400 without proper headers, which is expected\n\
+    success = response.status_code in [400, 401]\n\
+    sys.exit(0 if success else 1)\n\
+except Exception as e:\n\
+    print(f\"Health check failed: {e}\")\n\
+    sys.exit(1)\n\
+"' > /app/healthcheck.sh && chmod +x /app/healthcheck.sh
+
+# Health check using the script
+HEALTHCHECK --interval=60s --timeout=15s --start-period=120s --retries=3 \
+    CMD /app/healthcheck.sh
+
+# Set resource limits at runtime (these can be overridden by docker-compose)
+ENV MALLOC_TRIM_THRESHOLD_=131072
+
+# Run the twitch notifier with proper signal handling
+CMD ["python", "-u", "twitch_notifier.py"]
